@@ -13,10 +13,10 @@ export function CBWSDKProvider({ children }: CBWSDKProviderProps) {
   useEffect(() => {
     const cbwsdk = new CoinbaseWalletSDK({
       appName: 'Test App',
+      enableMobileWalletLink: true, // beta feature
     });
     setSdk(cbwsdk);
     const cbwprovider = cbwsdk.makeWeb3Provider('http');
-    console.info('provider', cbwprovider);
     setProvider(cbwprovider);
   }, []);
 

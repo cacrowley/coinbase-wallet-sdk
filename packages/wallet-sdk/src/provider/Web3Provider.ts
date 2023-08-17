@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Coinbase, Inc. <https://www.coinbase.com/>
+// Copyright (c) 2018-2023 Coinbase, Inc. <https://www.coinbase.com/>
 // Licensed under the Apache License, version 2.0
 
 import { Callback } from '../types';
@@ -9,7 +9,7 @@ export interface Web3Provider {
   send(request: JSONRPCRequest[]): JSONRPCResponse[];
   send(request: JSONRPCRequest, callback: Callback<JSONRPCResponse>): void;
   send(request: JSONRPCRequest[], callback: Callback<JSONRPCResponse[]>): void;
-  send<T = any>(method: string, params?: any[] | any): Promise<T>;
+  send<T = unknown>(method: string, params?: unknown[] | unknown): Promise<T>;
 
   sendAsync(request: JSONRPCRequest, callback: Callback<JSONRPCResponse>): void;
   sendAsync(request: JSONRPCRequest[], callback: Callback<JSONRPCResponse[]>): void;
@@ -28,5 +28,5 @@ export interface RequestArguments {
   method: string;
 
   /** The params of the RPC method, if any. */
-  params?: any;
+  params?: unknown;
 }

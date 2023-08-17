@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Coinbase, Inc. <https://www.coinbase.com/>
+// Copyright (c) 2018-2023 Coinbase, Inc. <https://www.coinbase.com/>
 // Licensed under the Apache License, version 2.0
 
 import { hexStringToUint8Array, uint8ArrayToHex } from '../util';
@@ -13,8 +13,8 @@ import { hexStringToUint8Array, uint8ArrayToHex } from '../util';
  */
 export async function encrypt(plainText: string, secret: string): Promise<string> {
   if (secret.length !== 64) throw Error(`secret must be 256 bits`);
-  const ivBytes = crypto.getRandomValues(new Uint8Array(12));
-  const secretKey: CryptoKey = await crypto.subtle.importKey(
+  const ivBytes = window.crypto.getRandomValues(new Uint8Array(12));
+  const secretKey: CryptoKey = await window.crypto.subtle.importKey(
     'raw',
     hexStringToUint8Array(secret),
     { name: 'aes-gcm' },
@@ -54,7 +54,7 @@ export function decrypt(cipherText: string, secret: string): Promise<string> {
   if (secret.length !== 64) throw Error(`secret must be 256 bits`);
   return new Promise<string>((resolve, reject) => {
     void (async function () {
-      const secretKey: CryptoKey = await crypto.subtle.importKey(
+      const secretKey: CryptoKey = await window.crypto.subtle.importKey(
         'raw',
         hexStringToUint8Array(secret),
         { name: 'aes-gcm' },

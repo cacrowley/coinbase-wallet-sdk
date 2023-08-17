@@ -2,17 +2,17 @@
   "name": "@coinbase/wallet-sdk-testapp",
   "packageManager": "yarn@3.6.1",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --port 3001",
     "build": "next build",
     "start": "next start"
   },
   "dependencies": {
-    "@chakra-ui/react": "^2.7.1",
+    "@chakra-ui/react": "^2.8.0",
     "@coinbase/wallet-sdk": "workspace:^",
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
-    "framer-motion": "^10.12.22",
-    "next": "^13.4.10",
+    "framer-motion": "^10.13.1",
+    "next": "^13.4.12",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-hook-form": "^7.45.2"

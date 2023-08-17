@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Coinbase, Inc. <https://www.coinbase.com/>
+// Copyright (c) 2018-2023 Coinbase, Inc. <https://www.coinbase.com/>
 // Licensed under the Apache License, version 2.0
 
 import BN from 'bn.js';
@@ -13,7 +13,7 @@ const HEXADECIMAL_STRING_REGEX = /^[a-f0-9]*$/;
  * @param length number of bytes
  */
 export function randomBytesHex(length: number): string {
-  return uint8ArrayToHex(crypto.getRandomValues(new Uint8Array(length)));
+  return uint8ArrayToHex(window.crypto.getRandomValues(new Uint8Array(length)));
 }
 
 export function uint8ArrayToHex(value: Uint8Array) {

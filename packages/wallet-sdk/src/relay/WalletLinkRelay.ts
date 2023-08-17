@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Coinbase, Inc. <https://www.coinbase.com/>
+// Copyright (c) 2018-2023 Coinbase, Inc. <https://www.coinbase.com/>
 // Licensed under the Apache License, version 2.0
 
 import bind from 'bind-decorator';
@@ -22,11 +22,12 @@ import { WalletLinkConnection } from '../connection/WalletLinkConnection';
 import {
   ErrorType,
   getErrorCode,
+  getMessageFromCode,
   standardErrorCodes,
-  standardErrorMessage,
   standardErrors,
 } from '../errors';
 import { ScopedLocalStorage } from '../lib/ScopedLocalStorage';
+import { WalletLinkRelayUI } from '../provider/WalletLinkRelayUI';
 import { WalletUI, WalletUIOptions } from '../provider/WalletUI';
 import { AddressString, IntNumber, ProviderType, RegExpString } from '../types';
 import { bigIntStringFromBN, createQrUrl, hexStringFromBuffer, randomBytesHex } from '../util';
@@ -352,9 +353,21 @@ export class WalletLinkRelay extends WalletSDKRelayAbstract {
       version: this.options.version,
       darkMode: this.options.darkMode,
       session,
-      connected$: connection.connected$,
-      chainId$: this.dappDefaultChainSubject,
+      connected: false,
+      chainId: this.dappDefaultChain,
     });
+
+    this.subscriptions.add(
+      connection.connected$.subscribe((connected) => {
+        (ui as WalletLinkRelayUI).setConnected(connected);
+      })
+    );
+
+    this.subscriptions.add(
+      this.dappDefaultChainSubject.subscribe((chainId) => {
+        (ui as WalletLinkRelayUI).setChainId(chainId);
+      })
+    );
 
     connection.connect();
 
@@ -736,7 +749,7 @@ export class WalletLinkRelay extends WalletSDKRelayAbstract {
     }
   }
 
-  private handleWeb3ResponseMessage(message: Web3ResponseMessage) {
+  protected handleWeb3ResponseMessage(message: Web3ResponseMessage) {
     const { response } = message;
     this.diagnostic?.log(EVENTS.WEB3_RESPONSE, {
       eventId: message.id,
@@ -760,7 +773,7 @@ export class WalletLinkRelay extends WalletSDKRelayAbstract {
     error?: ErrorType,
     errorCode?: number
   ) {
-    const errorMessage = error?.message ?? standardErrorMessage(errorCode);
+    const errorMessage = error?.message ?? getMessageFromCode(errorCode);
     this.handleWeb3ResponseMessage(
       Web3ResponseMessage({
         id,

@@ -18,7 +18,10 @@ This repo uses a yarn workspace. To get started, run:
 ```shell
 yarn install
 
-# To interact with the SDK
+# To start the development server run the following command. This starts a nextjs app on port 3001. Any changes in the SDK become available through the app.
+yarn dev
+
+# To interact with the SDK directly:
 yarn workspace @coinbase/wallet-sdk "<command>"
 
 # To lint all files
@@ -148,8 +151,7 @@ limitations under the License.
 
 ## Attributions
 
-- [Eth-json-rpc-filters](https://github.com/MetaMask/eth-json-rpc-filters/blob/main/LICENSE) under the ISC license
-- [Safe-event-emitter](https://github.com/MetaMask/safe-event-emitter/blob/master/LICENSE) under the ISC license
-- [Json-rpc-engine](https://github.com/MetaMask/json-rpc-engine/blob/main/LICENSE) under the ISC license
-- [Eth-rpc-errors](https://github.com/MetaMask/eth-rpc-errors/blob/main/LICENSE) under the MIT license
-- [Eth-block-tracker](https://github.com/MetaMask/eth-block-tracker/blob/master/LICENSE) under the MIT license
+- [eth-json-rpc-filters](https://github.com/MetaMask/eth-json-rpc-filters/blob/main/LICENSE) under the ISC license
+- [@metamask/json-rpc-engine](https://github.com/MetaMask/json-rpc-engine/blob/main/LICENSE) under the ISC license
+- [eth-rpc-errors](https://github.com/MetaMask/eth-rpc-errors/blob/main/LICENSE) under the MIT license
+- [eth-block-tracker](https://github.com/MetaMask/eth-block-tracker/blob/master/LICENSE) under the MIT license
