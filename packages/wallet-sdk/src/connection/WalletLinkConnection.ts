@@ -1,12 +1,12 @@
 // Copyright (c) 2018-2023 Coinbase, Inc. <https://www.coinbase.com/>
 // Licensed under the Apache License, version 2.0
-
 import {
   BehaviorSubject,
   iif,
+  merge,
   Observable,
   of,
-  ReplaySubject,
+  Subject,
   Subscription,
   throwError,
   timer,
@@ -66,7 +66,26 @@ export class WalletLinkConnection {
   private nextReqId = IntNumber(1);
   private connectedSubject = new BehaviorSubject(false);
   private linkedSubject = new BehaviorSubject(false);
-  private sessionConfigSubject = new ReplaySubject<SessionConfig>(1);
+  private unseenEventsSubject = new Subject<ServerMessageEvent>();
+
+  private sessionConfigListener?: (_: SessionConfig) => void;
+  setSessionConfigListener(listener: (_: SessionConfig) => void): void {
+    this.sessionConfigListener = listener;
+  }
+
+  private linkedListener?: (_: boolean) => void;
+  setLinkedListener(listener: (_: boolean) => void): void {
+    this.linkedListener = listener;
+  }
+
+  private connectedListener?: (_: boolean) => void;
+  setConnectedListener(listener: (_: boolean) => void): void {
+    this.connectedListener = listener;
+  }
+
+  setIncomingEventListener(listener: (_: ServerMessageEvent) => void): void {
+    this.subscribeIncomingEvent(listener);
+  }
 
   /**
    * Constructor
@@ -78,7 +97,7 @@ export class WalletLinkConnection {
   constructor(
     private sessionId: string,
     private sessionKey: string,
-    linkAPIUrl: string,
+    private linkAPIUrl: string,
     private diagnostic?: DiagnosticLogger,
     WebSocketClass: typeof WebSocket = WebSocket
   ) {
@@ -133,7 +152,10 @@ export class WalletLinkConnection {
           distinctUntilChanged(),
           catchError((_) => of(false))
         )
-        .subscribe((connected) => this.connectedSubject.next(connected))
+        .subscribe((connected) => {
+          this.connectedSubject.next(connected);
+          this.connectedListener?.(connected);
+        })
     );
 
     // send heartbeat every n seconds while connected
@@ -175,6 +197,7 @@ export class WalletLinkConnection {
             onlineGuests: msg.onlineGuests,
           });
           this.linkedSubject.next(msg.linked || msg.onlineGuests > 0);
+          this.linkedListener?.(msg.linked || msg.onlineGuests > 0);
         })
     );
 
@@ -189,12 +212,27 @@ export class WalletLinkConnection {
             sessionIdHash: Session.hash(sessionId),
             metadata_keys: msg && msg.metadata ? Object.keys(msg.metadata) : undefined,
           });
-          this.sessionConfigSubject.next({
+          this.sessionConfigListener?.({
             webhookId: msg.webhookId,
             webhookUrl: msg.webhookUrl,
             metadata: msg.metadata,
           });
         })
+    );
+
+    // mark unseen events as seen
+    this.subscriptions.add(
+      this.unseenEventsSubject.subscribe((e) => {
+        const credentials = `${this.sessionId}:${this.sessionKey}`;
+        const auth = `Basic ${btoa(credentials)}`;
+
+        fetch(`${this.linkAPIUrl}/events/${e.eventId}/seen`, {
+          method: 'POST',
+          headers: {
+            Authorization: auth,
+          },
+        }).catch((error) => console.error('Unabled to mark event as failed:', error));
+      })
     );
   }
 
@@ -232,7 +270,7 @@ export class WalletLinkConnection {
    * Emit true if connected and authenticated, else false
    * @returns an Observable
    */
-  public get connected$(): Observable<boolean> {
+  private get connected$(): Observable<boolean> {
     return this.connectedSubject.asObservable();
   }
 
@@ -240,7 +278,7 @@ export class WalletLinkConnection {
    * Emit once connected
    * @returns an Observable
    */
-  public get onceConnected$(): Observable<void> {
+  private get onceConnected$(): Observable<void> {
     return this.connected$.pipe(
       filter((v) => v),
       take(1),
@@ -252,7 +290,7 @@ export class WalletLinkConnection {
    * Emit true if linked (a guest has joined before)
    * @returns an Observable
    */
-  public get linked$(): Observable<boolean> {
+  private get linked$(): Observable<boolean> {
     return this.linkedSubject.asObservable();
   }
 
@@ -260,7 +298,7 @@ export class WalletLinkConnection {
    * Emit once when linked
    * @returns an Observable
    */
-  public get onceLinked$(): Observable<void> {
+  private get onceLinked$(): Observable<void> {
     return this.linked$.pipe(
       filter((v) => v),
       take(1),
@@ -269,33 +307,82 @@ export class WalletLinkConnection {
   }
 
   /**
-   * Emit current session config if available, and subsequent updates
-   * @returns an Observable for the session config
+   * Subscribe to incoming Event messages
    */
-  public get sessionConfig$(): Observable<SessionConfig> {
-    return this.sessionConfigSubject.asObservable();
+  private incomingEventSub?: Subscription;
+  private subscribeIncomingEvent(listener: (_: ServerMessageEvent) => void): void {
+    this.incomingEventSub?.unsubscribe();
+
+    this.incomingEventSub = merge(this.ws.incomingJSONData$, this.unseenEventsSubject)
+      .pipe(
+        filter((m) => {
+          if (m.type !== 'Event') {
+            return false;
+          }
+          const sme = m as ServerMessageEvent;
+          return (
+            typeof sme.sessionId === 'string' &&
+            typeof sme.eventId === 'string' &&
+            typeof sme.event === 'string' &&
+            typeof sme.data === 'string'
+          );
+        }),
+        map((m) => m as ServerMessageEvent)
+      )
+      .subscribe((m) => {
+        listener(m);
+      });
   }
 
-  /**
-   * Emit incoming Event messages
-   * @returns an Observable for the messages
-   */
-  public get incomingEvent$(): Observable<ServerMessageEvent> {
-    return this.ws.incomingJSONData$.pipe(
-      filter((m) => {
-        if (m.type !== 'Event') {
-          return false;
-        }
-        const sme = m as ServerMessageEvent;
-        return (
-          typeof sme.sessionId === 'string' &&
-          typeof sme.eventId === 'string' &&
-          typeof sme.event === 'string' &&
-          typeof sme.data === 'string'
-        );
-      }),
-      map((m) => m as ServerMessageEvent)
-    );
+  public async checkUnseenEvents() {
+    await this.onceConnected$.toPromise();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    try {
+      await this.fetchUnseenEventsAPI();
+    } catch (e) {
+      console.error('Unable to check for unseen events', e);
+    }
+  }
+
+  private async fetchUnseenEventsAPI() {
+    const credentials = `${this.sessionId}:${this.sessionKey}`;
+    const auth = `Basic ${btoa(credentials)}`;
+
+    const response = await fetch(`${this.linkAPIUrl}/events?unseen=true`, {
+      headers: {
+        Authorization: auth,
+      },
+    });
+
+    if (response.ok) {
+      const { events, error } = (await response.json()) as {
+        events?: {
+          id: string;
+          event: 'Web3Request' | 'Web3Response' | 'Web3RequestCanceled';
+          data: string;
+        }[];
+        timestamp: number;
+        error?: string;
+      };
+
+      if (error) {
+        throw new Error(`Check unseen events failed: ${error}`);
+      }
+
+      const responseEvents: ServerMessageEvent[] =
+        events
+          ?.filter((e) => e.event === 'Web3Response')
+          .map((e) => ({
+            type: 'Event',
+            sessionId: this.sessionId,
+            eventId: e.id,
+            event: e.event,
+            data: e.data,
+          })) ?? [];
+      responseEvents.forEach((e) => this.unseenEventsSubject.next(e));
+    } else {
+      throw new Error(`Check unseen events failed: ${response.status}`);
+    }
   }
 
   /**
@@ -304,21 +391,21 @@ export class WalletLinkConnection {
    * @param value
    * @returns an Observable that completes when successful
    */
-  public setSessionMetadata(key: string, value: string | null): Observable<void> {
+  public setSessionMetadata(key: string, value: string | null): Promise<void> {
     const message = ClientMessageSetSessionConfig({
       id: IntNumber(this.nextReqId++),
       sessionId: this.sessionId,
       metadata: { [key]: value },
     });
 
-    return this.onceConnected$.pipe(
-      flatMap((_) => this.makeRequest<ServerMessageOK | ServerMessageFail>(message)),
-      map((res) => {
+    return this.onceConnected$
+      .toPromise()
+      .then(() => this.makeRequest<ServerMessageOK | ServerMessageFail>(message).toPromise())
+      .then((res) => {
         if (isServerMessageFail(res)) {
           throw new Error(res.error || 'failed to set session metadata');
         }
-      })
-    );
+      });
   }
 
   /**
